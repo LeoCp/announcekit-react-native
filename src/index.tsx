@@ -1,9 +1,8 @@
-import * as React from "react";
-import { useDeepCompareEffect } from "use-deep-compare";
-import { Modal, StyleSheet, View } from "react-native";
-import { WebView } from "react-native-webview";
+import * as React from 'react';
+import { StyleSheet } from 'react-native';
+import { WebView } from 'react-native-webview';
 
-const Ctx = React.createContext<any>({});
+import { useDeepCompareEffect } from 'use-deep-compare';
 
 export interface AnnounceKitProps {
   widget: string;
@@ -19,88 +18,52 @@ export interface AnnounceKitProps {
   user_token?: string;
   labels?: string[];
   children?: React.ReactNode;
+  onRequestClose: () => void;
+  style?: any;
 }
 
-export function AnnounceKitProvider({
+export function AnnounceKit({
   widget,
   lang,
   user,
   user_token,
   labels,
   data,
-  children,
+  onRequestClose,
+  style,
 }: AnnounceKitProps) {
   const [state, setState] = React.useState<any>({});
-  const [isOpen, setIsOpen] = React.useState<boolean>(false);
-
   const params = { data, lang, user, user_token, labels, mobile: true };
 
   useDeepCompareEffect(() => {
     fetch(`${widget}/data.json`, {
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify(params),
       headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
       },
     })
-      .then((resp) => resp.json())
-      .then((data) => setState(data));
+      .then(resp => resp.json())
+      .then(data => setState(data));
   }, [widget, params]);
 
-  return (
-    <Ctx.Provider value={[state, params, { widget, setState, setIsOpen }]}>
-      {children}
-      <Widget visible={isOpen} onRequestClose={() => setIsOpen(false)} />
-    </Ctx.Provider>
-  );
-}
-
-export function useUnreadCount(): number | undefined {
-  const [state] = React.useContext<any>(Ctx);
-
   if (!state.posts) {
-    return undefined;
+    return null;
   }
-
-  if (state.userData?.lastRead) {
-    return state.posts.filter(
-      (p) => new Date(p.visible_at).getTime() > Number(state.userData.lastRead)
-    ).length;
-  }
-
-  return Math.min(5, state.posts.length);
-}
-
-export function useWidget() {
-  const [state, , { setIsOpen }] = React.useContext<any>(Ctx);
-
-  return [() => setIsOpen(true), () => setIsOpen(false)];
-}
-
-function Widget({ visible = true, onRequestClose = () => {} } = {}) {
-  const [oldstate, params, { widget, setState }] = React.useContext(Ctx);
 
   return (
-    <Modal
-      presentationStyle="pageSheet"
-      animationType="slide"
-      visible={visible}
+    <Frame
+      widget={widget}
+      params={params}
       onRequestClose={onRequestClose}
-    >
-      <View style={styles.modalView}>
-        <Frame
-          widget={widget}
-          params={params}
-          onRequestClose={onRequestClose}
-          onState={setState}
-        />
-      </View>
-    </Modal>
+      onState={setState}
+      style={style}
+    />
   );
 }
 
-function Frame({ widget, params, onRequestClose, onState }) {
+function Frame({ widget, params, onRequestClose, onState, style }) {
   const mounted = React.useRef<boolean>(false);
   const wv = React.useRef(null);
 
@@ -114,12 +77,12 @@ function Frame({ widget, params, onRequestClose, onState }) {
   }, []);
 
   const body = new URLSearchParams({
-    "json-body": JSON.stringify(params),
+    'json-body': JSON.stringify(params),
   }).toString();
 
-  const postMessage = (msg) => {
+  const postMessage = msg => {
     wv.current.injectJavaScript(
-      `window.postMessage(${JSON.stringify(msg)}, "*");`
+      `window.postMessage(${JSON.stringify(msg)}, "*");`,
     );
   };
 
@@ -128,25 +91,25 @@ function Frame({ widget, params, onRequestClose, onState }) {
       ref={wv}
       allowsInlineMediaPlayback={true}
       injectedJavaScript={`
-              var viewPortTag=document.createElement('meta');
-              viewPortTag.name = "viewport";
-              viewPortTag.content = "width=device-width, initial-scale=1, maximum-scale=1";
-              document.getElementsByTagName('head')[0].appendChild(viewPortTag);
-            `}
-      originWhitelist={["*"]}
-      containerStyle={{ width: "100%", height: "100%" }}
+        var viewPortTag=document.createElement('meta');
+        viewPortTag.name = "viewport";
+        viewPortTag.content = "width=device-width, initial-scale=1, maximum-scale=1";
+        document.getElementsByTagName('head')[0].appendChild(viewPortTag);
+      `}
+      originWhitelist={['*']}
+      containerStyle={styles.webView}
       source={{
         uri: `${widget}/view?react-native`,
-        method: "post",
+        method: 'post',
         body,
         headers: {
-          "content-type": "application/x-www-form-urlencoded",
+          'content-type': 'application/x-www-form-urlencoded',
         },
       }}
-      onLoad={(e) => {
-        postMessage({ event: "R2L_INIT", payload: { params } });
+      onLoad={e => {
+        postMessage({ event: 'R2L_INIT', payload: { params } });
       }}
-      onMessage={(event) => {
+      onMessage={event => {
         if (!mounted.current) {
           return;
         }
@@ -160,17 +123,17 @@ function Frame({ widget, params, onRequestClose, onState }) {
         }
 
         switch (message.event) {
-          case "L2R_REQUEST": {
-            if (message.payload == "close") {
+          case 'L2R_REQUEST': {
+            if (message.payload == 'close') {
               onRequestClose?.();
             }
 
             break;
           }
-          case "L2R_PATCH_STATE":
+          case 'L2R_PATCH_STATE':
             message.payload = { ...state, ...message.payload };
           // fallthrough
-          case "L2R_STATE":
+          case 'L2R_STATE':
             setState(message.payload);
             onState?.(message.payload);
         }
@@ -180,8 +143,10 @@ function Frame({ widget, params, onRequestClose, onState }) {
 }
 
 const styles = StyleSheet.create({
-  modalView: {
-    width: "100%",
-    height: "100%",
+  webView: {
+    width: '100%',
+    height: '100%',
+    borderTopRightRadius: 10,
+    borderTopLeftRadius: 10,
   },
 });
